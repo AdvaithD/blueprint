@@ -23,23 +23,29 @@ func NewOrderbook() *Orderbook {
 }
 
 func (ob *Orderbook) PlaceMarketOrder(o *Order) []Match {
+	// create a slice of matches
 	matches := []Match{}
 
+	// if order is a bid
 	if o.Bid {
+		// make sure size is smaller than total available asks
 		if o.Size > ob.AskTotalVolume() {
 			// not enough volume to fill
 			panic(fmt.Errorf("not enough volume [%.2f] to fill [%0.2f]", ob.AskTotalVolume(), o.Size))
 		}
+		// iterate through sorted asks
 		for _, limit := range ob.Asks() {
 			if o.Size > ob.BidTotalVolume() {
 				// not enough volume to fill
 				panic("not enough volume to fill ask")
 			}
+			// fill the current limit with the order 'o'
 			limitMatches := limit.Fill(o)
+			// append the match to the slice of matches
 			matches = append(matches, limitMatches...)
 		}
 	} else {
-
+		// TODO: implement market order for asks;
 	}
 
 	return matches
@@ -67,6 +73,8 @@ func (ob *Orderbook) PlaceLimitOrder(price float64, o *Order) []Match {
 		}
 		ob.AskLimits[price].AddOrder(o)
 	}
+
+	return []Match{}
 }
 
 // func (ob *Orderbook) PlaceOrder(price float64, o *Order) []Match {

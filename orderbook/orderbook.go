@@ -26,26 +26,38 @@ func (ob *Orderbook) PlaceMarketOrder(o *Order) []Match {
 	// create a slice of matches
 	matches := []Match{}
 
-	// if order is a bid
+	// if order is a bid (market buy)
 	if o.Bid {
 		// make sure size is smaller than total available asks
 		if o.Size > ob.AskTotalVolume() {
 			// not enough volume to fill
-			panic(fmt.Errorf("not enough volume [%.2f] to fill [%0.2f]", ob.AskTotalVolume(), o.Size))
+			panic(fmt.Errorf("not enough volume [size: %.2f] to fill [size: %0.2f]", ob.AskTotalVolume(), o.Size))
 		}
 		// iterate through sorted asks
 		for _, limit := range ob.Asks() {
-			if o.Size > ob.BidTotalVolume() {
-				// not enough volume to fill
-				panic("not enough volume to fill ask")
-			}
 			// fill the current limit with the order 'o'
 			limitMatches := limit.Fill(o)
 			// append the match to the slice of matches
 			matches = append(matches, limitMatches...)
+
+			if len(limit.Orders) == 0 {
+				ob.clearLimit(true, limit)
+			}
 		}
 	} else {
-		// TODO: implement market order for asks;
+		// order is an ask (market sell)
+		if o.Size > ob.BidTotalVolume() {
+			panic(fmt.Errorf("not enough volume [size: %.2f] to fill [size: %0.2f]", ob.BidTotalVolume(), o.Size))
+		}
+
+		for _, limit := range ob.Bids() {
+			limitMatches := limit.Fill(o)
+			matches = append(matches, limitMatches...)
+
+			if len(limit.Orders) == 0 {
+				ob.clearLimit(false, limit)
+			}
+		}
 	}
 
 	return matches
@@ -101,6 +113,29 @@ func (ob *Orderbook) Bids() []*Limit {
 	return ob.bids
 }
 
+func (ob *Orderbook) clearLimit(bid bool, l *Limit) {
+	if bid {
+		delete(ob.BidLimits, l.Price)
+		for i := 0; i < len(ob.bids); i++ {
+			if ob.bids[i] == l { // if we arrive at the specified limit
+				// remove it, slice op, shift oine to the left
+				ob.bids[i] = ob.bids[len(ob.bids)-1]
+				ob.bids = ob.bids[:len(ob.bids)-1]
+			}
+		}
+	} else {
+		delete(ob.AskLimits, l.Price)
+		for i := 0; i < len(ob.asks); i++ {
+			if ob.asks[i] == l { // if we arrive at the specified limit
+				// remove it
+				ob.asks[i] = ob.asks[len(ob.asks)-1]
+				ob.asks = ob.asks[:len(ob.asks)-1]
+			}
+		}
+	}
+}
+
+// aggregate bid volume on the book
 func (ob *Orderbook) BidTotalVolume() float64 {
 	total := 0.0
 
@@ -110,6 +145,7 @@ func (ob *Orderbook) BidTotalVolume() float64 {
 	return total
 }
 
+// agregate ask volume on the book
 func (ob *Orderbook) AskTotalVolume() float64 {
 	total := 0.0
 
